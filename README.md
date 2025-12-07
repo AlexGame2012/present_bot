@@ -31,7 +31,7 @@ cd present_bot
 python -m venv venv
 source venv/bin/activate # Для Linux/Mac 
 ```  
-# или
+## или
 ```bash
 venv\Scripts\activate   # Для Windows
 ```
