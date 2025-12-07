@@ -29,12 +29,12 @@ cd present_bot
 ### 2. Создание виртуального окружения
 ```bash
 python -m venv venv
-source venv/bin/activate
-```  # Для Linux/Mac 
+source venv/bin/activate # Для Linux/Mac 
+```  
 # или
 ```bash
-venv\Scripts\activate
-```   # Для Windows
+venv\Scripts\activate   # Для Windows
+```
 
 ### 3. Установка зависимостей
 
