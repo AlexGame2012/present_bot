@@ -79,7 +79,7 @@ APScheduler==3.10.4
 ```
 
 ## 📝 Лицензия
-Этот проект распространяется под лицензией MIT. Подробнее см. в файле [LICENSE](https://github.com/AlexGame2012/present_bot/new/main/LICENSE).
+Этот проект распространяется под лицензией MIT. Подробнее см. в файле [LICENSE](https://github.com/AlexGame2012/present_bot/blob/main/LICENSE).
 
 ## 👨‍💻 Автор AlexStudio Code
 
