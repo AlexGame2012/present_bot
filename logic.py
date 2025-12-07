@@ -16,7 +16,7 @@ class DatabaseManager:
                 user_id INTEGER PRIMARY KEY,
                 user_name TEXT
             )
-        ''')
+            ''')
 
             conn.execute('''
             CREATE TABLE IF NOT EXISTS prizes (
@@ -24,7 +24,7 @@ class DatabaseManager:
                 image TEXT,
                 used INTEGER DEFAULT 0
             )
-        ''')
+            ''')
 
             conn.execute('''
             CREATE TABLE IF NOT EXISTS winners (
@@ -34,7 +34,7 @@ class DatabaseManager:
                 FOREIGN KEY(user_id) REFERENCES users(user_id),
                 FOREIGN KEY(prize_id) REFERENCES prizes(prize_id)
             )
-        ''')
+            ''')
 
             conn.commit()
 
@@ -63,23 +63,38 @@ class DatabaseManager:
                 conn.commit()
                 return 1
 
-  
     def mark_prize_used(self, prize_id):
         conn = sqlite3.connect(self.database)
         with conn:
             conn.execute('''UPDATE prizes SET used = 1 WHERE prize_id = ?''', (prize_id,))
             conn.commit()
 
-
     def get_users(self):
+        conn = sqlite3.connect(self.database)
+        cur = conn.cursor()
+        cur.execute('SELECT user_id FROM users')
         return [x[0] for x in cur.fetchall()] 
         
     def get_prize_img(self, prize_id):
-        return cur.fetchall()[0][0]
+        conn = sqlite3.connect(self.database)
+        cur = conn.cursor()
+        cur.execute('SELECT image FROM prizes WHERE prize_id = ?', (prize_id,))
+        result = cur.fetchall()
+        return result[0][0] if result else None
 
     def get_random_prize(self):
-        return cur.fetchall()[0]
+        conn = sqlite3.connect(self.database)
+        cur = conn.cursor()
+        cur.execute('SELECT prize_id, image FROM prizes WHERE used = 0 ORDER BY RANDOM() LIMIT 1')
+        result = cur.fetchall()
+        return result[0] if result else None
     
+    def get_unused_prizes_count(self):
+        conn = sqlite3.connect(self.database)
+        cur = conn.cursor()
+        cur.execute('SELECT COUNT(*) FROM prizes WHERE used = 0')
+        result = cur.fetchone()
+        return result[0] if result else 0
   
 def hide_img(img_name):
     image = cv2.imread(f'img/{img_name}')
