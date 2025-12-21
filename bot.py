@@ -5,6 +5,9 @@ import schedule
 import threading
 import time
 from config import *
+import os
+import cv2
+import tempfile
 
 bot = TeleBot(API_TOKEN)
 
@@ -24,12 +27,14 @@ def callback_query(call):
         bot.send_photo(user_id, photo)
 
 def send_message():
-    prize_id, img = manager.get_random_prize()[:2]
-    manager.mark_prize_used(prize_id)
-    hide_img(img)
-    for user in manager.get_users():
-        with open(f'hidden_img/{img}', 'rb') as photo:
-            bot.send_photo(user, photo, reply_markup=gen_markup(id=prize_id))
+    result = manager.get_random_prize()
+    if result:
+        prize_id, img = result[:2]
+        manager.mark_prize_used(prize_id)
+        hide_img(img)
+        for user in manager.get_users():
+            with open(f'hidden_img/{img}', 'rb') as photo:
+                bot.send_photo(user, photo, reply_markup=gen_markup(id=prize_id))
 
 def shedule_thread():
     schedule.every().hour.do(send_message) 
@@ -43,13 +48,17 @@ def handle_start(message):
     if user_id in manager.get_users():
         bot.reply_to(message, "Ты уже зарегистрирован!")
     else:
-        manager.add_user(user_id, message.from_user.username)
+        manager.add_user(user_id, message.from_user.username or str(user_id))
         bot.reply_to(message, """Привет! Добро пожаловать! 
 Тебя успешно зарегистрировали!
 Каждый час тебе будут приходить новые картинки и у тебя будет шанс их получить!
 Для этого нужно быстрее всех нажать на кнопку 'Получить!'
 
-Только три первых пользователя получат картинку!)""")
+Только три первых пользователя получат картинку!
+
+📊 Доступные команды:
+/rating - посмотреть рейтинг победителей
+/myscore - посмотреть свою коллекцию призов""")
 
 @bot.message_handler(commands=['rating'])
 def handle_rating(message):
@@ -78,6 +87,41 @@ def handle_rating(message):
         result = "📊 Рейтинг пока пуст. Стань первым победителем!"
     
     bot.send_message(message.chat.id, result, parse_mode='HTML')
+
+@bot.message_handler(commands=['myscore'])
+def handle_my_score(message):
+    user_id = message.chat.id
+    
+    if user_id not in manager.get_users():
+        bot.reply_to(message, "❌ Вы не зарегистрированы! Используйте /start для регистрации.")
+        return
+    
+    bot.send_message(message.chat.id, "🖼️ Создаю вашу коллекцию призов...")
+    
+    collage = create_collage(user_id)
+    
+    if collage is None:
+        bot.send_message(message.chat.id, "📭 У вас еще нет призов или произошла ошибка создания коллажа.")
+        return
+    
+    with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
+        temp_filename = tmp_file.name
+        cv2.imwrite(temp_filename, collage)
+    
+    try:
+        with open(temp_filename, 'rb') as photo:
+            user_prizes = manager.get_winners_img(user_id)
+            prize_count = len(user_prizes) if user_prizes else 0
+            
+            caption = f"🎨 <b>Ваша коллекция призов</b>\n\n"
+            caption += f"🏆 Выиграно призов: <b>{prize_count}</b>\n"
+            caption += f"🔓 Оригинальные картинки - призы, которые вы получили\n"
+            caption += f"🔒 Зашифрованные картинки - призы, которые еще можно получить\n\n"
+            caption += "Продолжайте участвовать, чтобы собрать все призы! 🚀"
+            
+            bot.send_photo(message.chat.id, photo, caption=caption, parse_mode='HTML')
+    finally:
+        os.unlink(temp_filename)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('prize_'))
 def callback_query_new(call):
@@ -140,12 +184,26 @@ def polling_thread():
     bot.polling(none_stop=True)
 
 if __name__ == '__main__':
-    # Проверяем какое имя базы данных используется в config.py
+    if not os.path.exists('hidden_img'):
+        os.makedirs('hidden_img')
+    
     manager = DatabaseManager(DATABASE)
     manager.create_tables()
-
+    
+    prizes_img = os.listdir('img')
+    if prizes_img:
+        existing_prizes = manager.get_all_prizes()
+        if not existing_prizes:
+            data = [(x,) for x in prizes_img]
+            manager.add_prize(data)
+        
+        for img in prizes_img:
+            hidden_path = f'hidden_img/{img}'
+            if not os.path.exists(hidden_path):
+                hide_img(img)
+    
     polling_thread = threading.Thread(target=polling_thread)
     polling_shedule = threading.Thread(target=shedule_thread)
-
+    
     polling_thread.start()
     polling_shedule.start()

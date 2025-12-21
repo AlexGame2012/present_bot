@@ -3,6 +3,8 @@ from datetime import datetime
 from config import DATABASE 
 import os
 import cv2
+import numpy as np
+from math import sqrt, ceil, floor
 
 class DatabaseManager:
     def __init__(self, database):
@@ -41,7 +43,7 @@ class DatabaseManager:
     def add_user(self, user_id, user_name):
         conn = sqlite3.connect(self.database)
         with conn:
-            conn.execute('INSERT INTO users VALUES (?, ?)', (user_id, user_name))
+            conn.execute('INSERT OR IGNORE INTO users VALUES (?, ?)', (user_id, user_name))
             conn.commit()
 
     def add_prize(self, data):
@@ -116,6 +118,26 @@ class DatabaseManager:
                 LIMIT 10
             ''')
             return cur.fetchall()
+    
+    def get_winners_img(self, user_id):
+        """Получает список картинок, которые выиграл пользователь"""
+        conn = sqlite3.connect(self.database)
+        with conn:
+            cur = conn.cursor()
+            cur.execute(''' 
+                SELECT image FROM winners 
+                INNER JOIN prizes ON 
+                winners.prize_id = prizes.prize_id
+                WHERE user_id = ?''', (user_id, ))
+            return cur.fetchall()
+    
+    def get_all_prizes(self):
+        """Получает список всех призов"""
+        conn = sqlite3.connect(self.database)
+        with conn:
+            cur = conn.cursor()
+            cur.execute('SELECT image FROM prizes')
+            return [x[0] for x in cur.fetchall()]
   
 def hide_img(img_name):
     image = cv2.imread(f'img/{img_name}')
@@ -124,9 +146,68 @@ def hide_img(img_name):
     pixelated_image = cv2.resize(pixelated_image, (image.shape[1], image.shape[0]), interpolation=cv2.INTER_NEAREST)
     cv2.imwrite(f'hidden_img/{img_name}', pixelated_image)
 
+def create_collage(user_id):
+    """Создает коллаж с призами пользователя"""
+    db = DatabaseManager(DATABASE)
+    
+    user_prizes_data = db.get_winners_img(user_id)
+    user_prizes = [x[0] for x in user_prizes_data] if user_prizes_data else []
+    
+    all_prizes = db.get_all_prizes()
+    
+    if not all_prizes:
+        return None
+    
+    image_paths = []
+    for prize in all_prizes:
+        if prize in user_prizes:
+            path = f'img/{prize}'
+        else:
+            path = f'hidden_img/{prize}'
+        
+        if os.path.exists(path):
+            image_paths.append(path)
+        else:
+            continue
+    
+    if not image_paths:
+        return None
+    
+    images = []
+    for path in image_paths:
+        image = cv2.imread(path)
+        if image is not None:
+            image = cv2.resize(image, (200, 200))
+            images.append(image)
+    
+    if not images:
+        return None
+    
+    num_images = len(images)
+    num_cols = min(floor(sqrt(num_images)), 3) 
+    num_rows = ceil(num_images / num_cols)
+    
+    img_height, img_width = images[0].shape[:2]
+    
+    collage = np.zeros((num_rows * img_height, num_cols * img_width, 3), dtype=np.uint8)
+    
+    for i, image in enumerate(images):
+        row = i // num_cols
+        col = i % num_cols
+        collage[row * img_height:(row + 1) * img_height, 
+                col * img_width:(col + 1) * img_width, :] = image
+    
+    return collage
+
 if __name__ == '__main__':
     manager = DatabaseManager(DATABASE)
     manager.create_tables()
     prizes_img = os.listdir('img')
     data = [(x,) for x in prizes_img]
     manager.add_prize(data)
+    
+    if not os.path.exists('hidden_img'):
+        os.makedirs('hidden_img')
+    
+    for img in prizes_img:
+        hide_img(img)
